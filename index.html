@@ -1,0 +1,1345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>JunkDocGen — Synthetic Document Generator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Syne:wght@400;700;800&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/seedrandom/3.0.5/seedrandom.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --surface2: #1a1a1a;
+    --border: #222222;
+    --accent: #e8ff00;
+    --accent2: #ff6b35;
+    --text: #f0f0f0;
+    --text-dim: #666;
+    --text-mid: #999;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'Syne', sans-serif;
+    --radius: 4px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanline overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* HEADER */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    background: rgba(10,10,10,0.95);
+    backdrop-filter: blur(12px);
+    z-index: 100;
+  }
+
+  .logo {
+    font-family: var(--sans);
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-bracket {
+    color: var(--accent);
+    font-family: var(--mono);
+    font-weight: 400;
+  }
+
+  .logo-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text-dim);
+    font-weight: 400;
+    letter-spacing: 0.1em;
+  }
+
+  .header-meta {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    display: inline-block;
+    margin-right: 6px;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  /* MAIN LAYOUT */
+  .main {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    min-height: calc(100vh - 61px);
+  }
+
+  /* SIDEBAR */
+  .sidebar {
+    border-right: 1px solid var(--border);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    overflow-y: auto;
+    max-height: calc(100vh - 61px);
+    position: sticky;
+    top: 61px;
+  }
+
+  .section-label {
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    padding: 16px 0 8px;
+    border-top: 1px solid var(--border);
+    margin-top: 8px;
+  }
+
+  .section-label:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+
+  label {
+    font-size: 11px;
+    color: var(--text-mid);
+    display: block;
+    margin-bottom: 4px;
+    margin-top: 10px;
+  }
+
+  label:first-of-type { margin-top: 0; }
+
+  select, input[type="number"], input[type="text"] {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 8px 10px;
+    border-radius: var(--radius);
+    appearance: none;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  select:focus, input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 2px rgba(232,255,0,0.08);
+  }
+
+  select { cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23666'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px; }
+
+  .range-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+    height: 4px;
+    cursor: pointer;
+    background: var(--surface2);
+    border-radius: 2px;
+  }
+
+  .range-val {
+    font-size: 11px;
+    color: var(--accent);
+    min-width: 32px;
+    text-align: right;
+  }
+
+  .seed-row {
+    display: flex;
+    gap: 6px;
+  }
+
+  .seed-row input { flex: 1; }
+
+  .btn-icon {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-mid);
+    padding: 8px 10px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.15s;
+    flex-shrink: 0;
+  }
+
+  .btn-icon:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* FORMAT GRID */
+  .format-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+  }
+
+  .fmt-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 8px 4px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .fmt-btn:hover { border-color: var(--text-mid); color: var(--text); }
+  .fmt-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(232,255,0,0.05); }
+
+  /* GENERATE BUTTON */
+  .btn-generate {
+    width: 100%;
+    background: var(--accent);
+    color: #000;
+    border: none;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 700;
+    padding: 14px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    margin-top: 20px;
+    letter-spacing: 0.05em;
+    transition: all 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn-generate:hover { background: #fff; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(232,255,0,0.2); }
+  .btn-generate:active { transform: translateY(0); }
+  .btn-generate:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .btn-generate .spinner {
+    display: none;
+    width: 16px; height: 16px;
+    border: 2px solid #000;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.6s linear infinite;
+    margin: 0 auto;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .btn-generate.loading .btn-text { display: none; }
+  .btn-generate.loading .spinner { display: block; }
+
+  /* CONTENT AREA */
+  .content {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* TOOLBAR */
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .toolbar-info {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .toolbar-info span { color: var(--text-mid); }
+
+  .seed-display {
+    font-size: 11px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+  }
+
+  .seed-display em { color: var(--accent); font-style: normal; }
+
+  .btn-download {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 8px 16px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn-download:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-download:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* PREVIEW */
+  .preview-wrap {
+    flex: 1;
+    padding: 32px;
+    overflow-y: auto;
+  }
+
+  .preview-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 400px;
+    color: var(--text-dim);
+    text-align: center;
+    gap: 12px;
+  }
+
+  .preview-empty .big-icon {
+    font-size: 48px;
+    opacity: 0.3;
+  }
+
+  .preview-empty p {
+    font-size: 12px;
+    line-height: 1.6;
+    max-width: 300px;
+  }
+
+  /* DOCUMENT PREVIEW */
+  .doc-preview {
+    background: #fff;
+    color: #111;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 60px 72px;
+    box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+    font-family: 'Times New Roman', Georgia, serif;
+    font-size: 12pt;
+    line-height: 1.7;
+    border-radius: 2px;
+    animation: slideUp 0.3s ease;
+    min-height: 600px;
+  }
+
+  @keyframes slideUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .doc-preview h1 {
+    font-size: 18pt;
+    font-weight: bold;
+    margin-bottom: 6pt;
+    line-height: 1.3;
+    color: #000;
+  }
+
+  .doc-preview h2 {
+    font-size: 13pt;
+    font-weight: bold;
+    margin-top: 20pt;
+    margin-bottom: 8pt;
+    color: #000;
+  }
+
+  .doc-preview h3 {
+    font-size: 11pt;
+    font-weight: bold;
+    margin-top: 14pt;
+    margin-bottom: 6pt;
+  }
+
+  .doc-preview p { margin-bottom: 10pt; }
+
+  .doc-preview .doc-meta {
+    font-size: 10pt;
+    color: #555;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 12pt;
+    margin-bottom: 20pt;
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .doc-preview .doc-section {
+    margin-bottom: 16pt;
+  }
+
+  .doc-preview table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12pt 0;
+    font-size: 10pt;
+  }
+
+  .doc-preview table th {
+    background: #f0f0f0;
+    border: 1px solid #ccc;
+    padding: 6pt 8pt;
+    text-align: left;
+    font-weight: bold;
+  }
+
+  .doc-preview table td {
+    border: 1px solid #ddd;
+    padding: 5pt 8pt;
+  }
+
+  .doc-preview table tr:nth-child(even) td { background: #fafafa; }
+
+  .doc-preview .signature-block {
+    margin-top: 40pt;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+  }
+
+  .doc-preview .sig-line {
+    border-bottom: 1px solid #333;
+    margin-bottom: 4pt;
+    height: 24pt;
+  }
+
+  .doc-preview .sig-label {
+    font-size: 9pt;
+    color: #666;
+  }
+
+  .doc-preview .attribution {
+    margin-top: 40pt;
+    padding-top: 12pt;
+    border-top: 1px solid #ccc;
+    font-size: 8pt;
+    color: #888;
+    font-style: italic;
+  }
+
+  .doc-preview .watermark-badge {
+    display: inline-block;
+    font-family: 'Courier New', monospace;
+    font-size: 8pt;
+    color: #aaa;
+    border: 1px solid #ddd;
+    padding: 2pt 6pt;
+    border-radius: 2pt;
+    margin-bottom: 16pt;
+    letter-spacing: 0.1em;
+  }
+
+  /* STATS BAR */
+  .stats-bar {
+    display: flex;
+    gap: 24px;
+    padding: 12px 24px;
+    border-top: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--text-dim);
+  }
+
+  .stat { display: flex; gap: 6px; }
+  .stat-val { color: var(--text-mid); }
+
+  /* TOAST */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 12px;
+    padding: 12px 18px;
+    border-radius: var(--radius);
+    z-index: 9999;
+    animation: toastIn 0.2s ease;
+    max-width: 280px;
+  }
+
+  .toast.success { border-color: var(--accent); }
+  .toast.error { border-color: var(--accent2); }
+
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: #333; }
+
+  @media (max-width: 768px) {
+    .main { grid-template-columns: 1fr; }
+    .sidebar { position: static; max-height: none; border-right: none; border-bottom: 1px solid var(--border); }
+    .doc-preview { padding: 32px 24px; }
+    header { padding: 16px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <span class="logo-bracket">[</span>JunkDocGen<span class="logo-bracket">]</span>
+    <span class="logo-tag">v1.0 · lassiipk</span>
+  </div>
+  <div class="header-meta">
+    <span><span class="status-dot"></span>ONLINE</span>
+    <span>Stateless · Open Source · MIT</span>
+  </div>
+</header>
+
+<div class="main">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+
+    <div class="section-label">Document Type</div>
+
+    <label>Category</label>
+    <select id="docType">
+      <option value="legal">Legal Document</option>
+      <option value="financial">Financial Document</option>
+      <option value="resume">Resume / CV</option>
+      <option value="article">Article / Blog Post</option>
+      <option value="lorem">Lorem Ipsum / Random</option>
+      <option value="wikipedia">Wikipedia-style Summary</option>
+      <option value="mixed">Mixed / Random</option>
+    </select>
+
+    <label>Sub-type</label>
+    <select id="docSubtype"></select>
+
+    <div class="section-label">Output Format</div>
+
+    <div class="format-grid">
+      <button class="fmt-btn active" data-fmt="html">HTML</button>
+      <button class="fmt-btn" data-fmt="txt">TXT</button>
+      <button class="fmt-btn" data-fmt="md">MD</button>
+      <button class="fmt-btn" data-fmt="json">JSON</button>
+      <button class="fmt-btn" data-fmt="csv">CSV</button>
+      <button class="fmt-btn" data-fmt="pdf">PDF</button>
+    </div>
+
+    <div class="section-label">Parameters</div>
+
+    <label>Language</label>
+    <select id="language">
+      <option value="en">English</option>
+      <option value="fr">French (Français)</option>
+      <option value="de">German (Deutsch)</option>
+      <option value="es">Spanish (Español)</option>
+      <option value="ur">Urdu (اردو)</option>
+      <option value="ar">Arabic (العربية)</option>
+    </select>
+
+    <label>Word Count: <span id="wcLabel">500</span></label>
+    <div class="range-wrap">
+      <input type="range" id="wordCount" min="100" max="3000" step="50" value="500"/>
+      <span class="range-val" id="wcVal">500</span>
+    </div>
+
+    <label>Realism Level</label>
+    <select id="realism">
+      <option value="low">Low — obvious placeholders</option>
+      <option value="medium" selected>Medium — plausible</option>
+      <option value="high">High — realistic-looking</option>
+    </select>
+
+    <label>Randomness: <span id="randLabel">0.5</span></label>
+    <div class="range-wrap">
+      <input type="range" id="randomness" min="0" max="1" step="0.05" value="0.5"/>
+      <span class="range-val" id="randVal">0.5</span>
+    </div>
+
+    <label>Seed</label>
+    <div class="seed-row">
+      <input type="text" id="seed" placeholder="auto"/>
+      <button class="btn-icon" id="randSeed" title="Randomize seed">⚄</button>
+    </div>
+
+    <button class="btn-generate" id="generateBtn">
+      <span class="btn-text">GENERATE DOCUMENT</span>
+      <div class="spinner"></div>
+    </button>
+
+  </aside>
+
+  <!-- CONTENT -->
+  <div class="content">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <div class="toolbar-info">
+          <span id="docTypeLabel">—</span>
+        </div>
+        <div class="seed-display">SEED: <em id="usedSeed">—</em></div>
+      </div>
+      <button class="btn-download" id="downloadBtn" disabled>
+        ↓ Download <span id="dlFormat">FILE</span>
+      </button>
+    </div>
+
+    <div class="preview-wrap" id="previewWrap">
+      <div class="preview-empty">
+        <div class="big-icon">◻</div>
+        <p>Configure your parameters and click <strong>GENERATE DOCUMENT</strong> to synthesize a fake document.</p>
+        <p style="font-size:10px; color: var(--text-dim); margin-top: 8px;">All content is algorithmically generated. No data is stored.</p>
+      </div>
+    </div>
+
+    <div class="stats-bar">
+      <div class="stat">WORDS <span class="stat-val" id="statWords">—</span></div>
+      <div class="stat">CHARS <span class="stat-val" id="statChars">—</span></div>
+      <div class="stat">FORMAT <span class="stat-val" id="statFmt">—</span></div>
+      <div class="stat">SEED <span class="stat-val" id="statSeed">—</span></div>
+      <div class="stat">LANG <span class="stat-val" id="statLang">—</span></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════
+//  SUBTYPES
+// ═══════════════════════════════════════════════════
+const SUBTYPES = {
+  legal:     ['NDA','Employment Contract','Court Filing','Affidavit','Power of Attorney','Lease Agreement','Terms of Service','Privacy Policy'],
+  financial: ['Invoice','Bank Statement','Balance Sheet','Audit Report','Profit & Loss','Tax Return','Purchase Order','Financial Forecast'],
+  resume:    ['Chronological CV','Functional CV','Academic CV','Technical Resume','Executive Bio'],
+  article:   ['News Report','Opinion Editorial','How-to Guide','Listicle','Research Abstract','Press Release'],
+  lorem:     ['Paragraphs','Sentences','Words','Cicero Original'],
+  wikipedia: ['General Article','Scientific Topic','Historical Event','Geography','Biography'],
+  mixed:     ['Auto (Random Mix)'],
+};
+
+// ═══════════════════════════════════════════════════
+//  FAKE DATA POOLS
+// ═══════════════════════════════════════════════════
+const DATA = {
+  firstNames: ['James','Olivia','Michael','Emma','William','Ava','Robert','Isabella','David','Sophia','Joseph','Charlotte','Thomas','Amelia','Charles','Mia','Daniel','Harper','Matthew','Evelyn','Liam','Noah','Ethan','Lucas','Mason'],
+  lastNames:  ['Smith','Johnson','Williams','Brown','Jones','Garcia','Miller','Davis','Wilson','Martinez','Anderson','Taylor','Thomas','Hernandez','Moore','Martin','Lee','Perez','Thompson','White','Harris','Sanchez','Clark','Lewis','Robinson'],
+  companies:  ['Nexus Corp','Altis Holdings','Meridian Group','Vertex Industries','Pinnacle Ltd','Stratos LLC','Axiom Partners','Quantum Dynamics','Orion Solutions','Helix Systems','Vantage Enterprises','Apex Global','Summit Analytics','Crest Financial','Harbor Capital'],
+  cities:     ['New York','Los Angeles','Chicago','Houston','Phoenix','Philadelphia','San Antonio','Dallas','San Diego','Jacksonville','Austin','Fort Worth','Columbus','Charlotte','Indianapolis','Seattle','Denver','Nashville','Louisville','Portland'],
+  countries:  ['United States','United Kingdom','Germany','France','Canada','Australia','Singapore','Japan','Netherlands','Sweden'],
+  streets:    ['Main St','Oak Ave','Maple Blvd','Cedar Lane','Elm Drive','Washington Rd','Park Ave','Highland St','River Rd','Sunset Blvd'],
+  skills:     ['Python','JavaScript','Project Management','Data Analysis','Machine Learning','Financial Modeling','Strategic Planning','Team Leadership','SQL','React','Node.js','AWS','DevOps','Agile','UX Design','Marketing Analytics','Contract Negotiation','Public Speaking'],
+  universities: ['State University','Technical Institute','College of Sciences','Business School','Polytechnic University','Institute of Technology','School of Law','Graduate School of Management'],
+  degrees:    ['Bachelor of Science','Bachelor of Arts','Master of Science','Master of Business Administration','Juris Doctor','Doctor of Philosophy','Master of Engineering','Bachelor of Engineering'],
+  fields:     ['Computer Science','Business Administration','Finance','Law','Mechanical Engineering','Data Science','Economics','Political Science','Electrical Engineering','Marketing'],
+  legalTerms: ['whereas','hereinafter','indemnification','jurisdiction','arbitration','liability','confidentiality','intellectual property','non-disclosure','termination','severability','force majeure','governing law','breach','remedies','covenants','warranties','representations'],
+  finTerms:   ['amortization','depreciation','EBITDA','liquidity','leverage ratio','working capital','accounts receivable','accounts payable','net present value','return on equity','gross margin','operating expenses','capital expenditure','cash flow','fiscal quarter'],
+  loremWords: ['lorem','ipsum','dolor','sit','amet','consectetur','adipiscing','elit','sed','do','eiusmod','tempor','incididunt','ut','labore','et','dolore','magna','aliqua','enim','ad','minim','veniam','quis','nostrud','exercitation','ullamco','laboris','nisi','aliquip','ex','ea','commodo','consequat','duis','aute','irure','in','reprehenderit','voluptate','velit','esse','cillum','eu','fugiat','nulla','pariatur','excepteur','sint','occaecat','cupidatat','non','proident','sunt','culpa','qui','officia','deserunt','mollit','anim','id','est','laborum'],
+};
+
+const LANG_META = {
+  en: { dir: 'ltr', dateFormat: (d) => d.toLocaleDateString('en-US', {year:'numeric',month:'long',day:'numeric'}), currency: 'USD', currencySymbol: '$' },
+  fr: { dir: 'ltr', dateFormat: (d) => d.toLocaleDateString('fr-FR', {year:'numeric',month:'long',day:'numeric'}), currency: 'EUR', currencySymbol: '€' },
+  de: { dir: 'ltr', dateFormat: (d) => d.toLocaleDateString('de-DE', {year:'numeric',month:'long',day:'numeric'}), currency: 'EUR', currencySymbol: '€' },
+  es: { dir: 'ltr', dateFormat: (d) => d.toLocaleDateString('es-ES', {year:'numeric',month:'long',day:'numeric'}), currency: 'USD', currencySymbol: '$' },
+  ur: { dir: 'rtl', dateFormat: (d) => d.toLocaleDateString('ur-PK', {year:'numeric',month:'long',day:'numeric'}), currency: 'PKR', currencySymbol: '₨' },
+  ar: { dir: 'rtl', dateFormat: (d) => d.toLocaleDateString('ar-SA', {year:'numeric',month:'long',day:'numeric'}), currency: 'SAR', currencySymbol: 'ر.س' },
+};
+
+// ═══════════════════════════════════════════════════
+//  PRNG UTILITIES
+// ═══════════════════════════════════════════════════
+let rng;
+
+function initRNG(seed) {
+  rng = new Math.seedrandom(String(seed));
+}
+
+function rand() { return rng(); }
+function randInt(min, max) { return Math.floor(rand() * (max - min + 1)) + min; }
+function pick(arr) { return arr[randInt(0, arr.length - 1)]; }
+function pickN(arr, n) {
+  const copy = [...arr];
+  const result = [];
+  for (let i = 0; i < Math.min(n, copy.length); i++) {
+    const idx = randInt(0, copy.length - 1);
+    result.push(copy.splice(idx, 1)[0]);
+  }
+  return result;
+}
+
+function fakeDate(yearsBack = 5) {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - randInt(0, yearsBack));
+  d.setMonth(randInt(0, 11));
+  d.setDate(randInt(1, 28));
+  return d;
+}
+
+function fakeName() { return `${pick(DATA.firstNames)} ${pick(DATA.lastNames)}`; }
+function fakeCompany() { return pick(DATA.companies); }
+function fakeAddress() { return `${randInt(100, 9999)} ${pick(DATA.streets)}, ${pick(DATA.cities)}, ${pick(DATA.countries)}`; }
+function fakeMoney(min=1000, max=999999) {
+  const lang = document.getElementById('language').value;
+  const meta = LANG_META[lang];
+  return `${meta.currencySymbol}${(randInt(min*100, max*100)/100).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
+}
+function fakeEmail(name) {
+  const n = name.toLowerCase().replace(/\s+/g,'.');
+  const domains = ['gmail.com','outlook.com','company.com','enterprise.org','mail.net'];
+  return `${n}@${pick(domains)}`;
+}
+function fakePhone() { return `+1 (${randInt(200,999)}) ${randInt(200,999)}-${randInt(1000,9999)}`; }
+function fakeCaseNum() { return `${randInt(2018,2025)}-CV-${randInt(10000,99999)}`; }
+
+// ═══════════════════════════════════════════════════
+//  TEXT GENERATORS
+// ═══════════════════════════════════════════════════
+function loremSentence(wordMin=8, wordMax=18) {
+  const wc = randInt(wordMin, wordMax);
+  const words = [];
+  for (let i = 0; i < wc; i++) words.push(pick(DATA.loremWords));
+  words[0] = words[0].charAt(0).toUpperCase() + words[0].slice(1);
+  return words.join(' ') + '.';
+}
+
+function loremParagraph(sentMin=3, sentMax=6) {
+  const sc = randInt(sentMin, sentMax);
+  const sentences = [];
+  for (let i = 0; i < sc; i++) sentences.push(loremSentence());
+  return sentences.join(' ');
+}
+
+function legalClause(title, realism) {
+  const party1 = fakeName(), party2 = fakeName();
+  if (realism === 'low') {
+    return `${title.toUpperCase()}: PARTY_A agrees that CLAUSE_TEXT applies herein to PARTY_B under JURISDICTION.`;
+  }
+  const terms = pickN(DATA.legalTerms, 4);
+  return `${title.toUpperCase()}\n\nThe parties agree that all matters of ${terms[0]} and ${terms[1]} shall be governed in accordance with the provisions set forth herein. In the event of any ${terms[2]}, the affected party shall provide written notice within ${randInt(5,30)} (${numToWords(randInt(5,30))}) business days. The provisions relating to ${terms[3]} shall survive the termination of this Agreement and remain in full force and effect thereafter.`;
+}
+
+function numToWords(n) {
+  const w = ['zero','one','two','three','four','five','six','seven','eight','nine','ten','eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen','twenty','twenty-one','twenty-two','twenty-three','twenty-four','twenty-five','twenty-six','twenty-seven','twenty-eight','twenty-nine','thirty'];
+  return w[n] || String(n);
+}
+
+function targetWords(params) {
+  return Math.max(100, Math.round(params.wordCount * (0.8 + rand() * 0.4)));
+}
+
+// ═══════════════════════════════════════════════════
+//  DOCUMENT GENERATORS → return { title, html, text }
+// ═══════════════════════════════════════════════════
+
+function generateLegal(params) {
+  const subtype = params.subtype;
+  const party1 = fakeName(), party2 = fakeName();
+  const co1 = fakeCompany(), co2 = fakeCompany();
+  const addr1 = fakeAddress(), addr2 = fakeAddress();
+  const date = fakeDate(1);
+  const lang = LANG_META[params.language];
+  const dateStr = lang.dateFormat(date);
+  const caseNum = fakeCaseNum();
+  const r = params.realism;
+
+  let title = subtype;
+  let sections = [];
+
+  if (subtype === 'NDA' || subtype === 'Employment Contract') {
+    sections = [
+      { h: 'PARTIES', body: `This ${subtype} ("Agreement") is entered into as of ${dateStr}, by and between:\n\n<strong>${party1}</strong> ("${party1.split(' ')[0]}"), residing at ${addr1} ("Party A"), and\n\n<strong>${party2}</strong> ("${party2.split(' ')[0]}"), residing at ${addr2}, acting on behalf of <strong>${co1}</strong> ("Party B").` },
+      { h: '1. DEFINITIONS', body: legalClause('Definitions', r) },
+      { h: '2. OBLIGATIONS', body: legalClause('Obligations', r) },
+      { h: '3. CONFIDENTIALITY', body: legalClause('Confidentiality', r) },
+      { h: '4. TERM AND TERMINATION', body: `This Agreement shall commence on ${dateStr} and continue for a period of ${randInt(1,5)} (${numToWords(randInt(1,5))}) years unless earlier terminated by either party upon ${randInt(15,90)} days written notice.` },
+      { h: '5. GOVERNING LAW', body: `This Agreement shall be governed by and construed in accordance with the laws of the State of ${pick(DATA.cities).split(',')[0]}, without regard to its conflict of laws provisions.` },
+      { h: '6. DISPUTE RESOLUTION', body: legalClause('Dispute Resolution', r) },
+      { h: '7. ENTIRE AGREEMENT', body: `This Agreement constitutes the entire agreement between the parties with respect to the subject matter hereof and supersedes all prior negotiations, representations, or agreements.` },
+    ];
+  } else {
+    for (let i = 0; i < 6; i++) {
+      sections.push({ h: `SECTION ${i+1}`, body: legalClause(`Clause ${i+1}`, r) });
+    }
+  }
+
+  let html = `<div class="watermark-badge">⚠ SYNTHETIC DOCUMENT — NOT LEGALLY BINDING</div>
+<h1>${title}</h1>
+<div class="doc-meta">
+  <span>Case/Ref: ${caseNum}</span>
+  <span>Date: ${dateStr}</span>
+  <span>Jurisdiction: ${pick(DATA.cities)}</span>
+</div>`;
+
+  for (const s of sections) {
+    html += `<div class="doc-section"><h2>${s.h}</h2><p>${s.body.replace(/\n/g,'</p><p>')}</p></div>`;
+  }
+
+  if (r !== 'low') {
+    html += `<div class="signature-block">
+      <div><div class="sig-line"></div><div class="sig-label">${party1} — Party A</div></div>
+      <div><div class="sig-line"></div><div class="sig-label">${party2} — Party B</div></div>
+    </div>`;
+  }
+
+  const text = `${title}\n${'='.repeat(60)}\nCase/Ref: ${caseNum}\nDate: ${dateStr}\n\n` + sections.map(s => `${s.h}\n${'-'.repeat(40)}\n${s.body}`).join('\n\n');
+  return { title, html, text, meta: { parties: [party1, party2], companies: [co1, co2], date: dateStr, caseNum } };
+}
+
+function generateFinancial(params) {
+  const subtype = params.subtype;
+  const co = fakeCompany();
+  const client = fakeCompany();
+  const date = fakeDate(1);
+  const lang = LANG_META[params.language];
+  const dateStr = lang.dateFormat(date);
+  const invoiceNum = `INV-${randInt(10000,99999)}`;
+  const r = params.realism;
+
+  let html = `<div class="watermark-badge">⚠ SYNTHETIC DOCUMENT — NOT REAL FINANCIAL DATA</div>
+<h1>${subtype}</h1>
+<div class="doc-meta">
+  <span><strong>${co}</strong></span>
+  <span>Doc #: ${invoiceNum}</span>
+  <span>Date: ${dateStr}</span>
+</div>`;
+
+  if (subtype === 'Invoice' || subtype === 'Purchase Order') {
+    const rows = randInt(3, 8);
+    let total = 0;
+    let tableRows = '';
+    for (let i = 0; i < rows; i++) {
+      const qty = randInt(1, 50);
+      const unit = randInt(50, 2000) + 0.99;
+      const amt = qty * unit;
+      total += amt;
+      const desc = r === 'low' ? `SERVICE_ITEM_${i+1}` : `${pick(['Professional Services','Consulting Fee','Software License','Support Package','Training Session','Data Processing','Analysis Report','Technical Review'])} - ${pick(['Q1','Q2','Q3','Q4'])} ${date.getFullYear()}`;
+      tableRows += `<tr><td>${desc}</td><td>${qty}</td><td>${lang.currencySymbol}${unit.toFixed(2)}</td><td>${lang.currencySymbol}${amt.toFixed(2)}</td></tr>`;
+    }
+    const tax = total * 0.08;
+    html += `<p><strong>Bill To:</strong> ${client}<br>${fakeAddress()}</p>
+<table>
+  <tr><th>Description</th><th>Qty</th><th>Unit Price</th><th>Amount</th></tr>
+  ${tableRows}
+  <tr><td colspan="3"><strong>Subtotal</strong></td><td><strong>${lang.currencySymbol}${total.toFixed(2)}</strong></td></tr>
+  <tr><td colspan="3">Tax (8%)</td><td>${lang.currencySymbol}${tax.toFixed(2)}</td></tr>
+  <tr><td colspan="3"><strong>Total Due</strong></td><td><strong>${lang.currencySymbol}${(total+tax).toFixed(2)}</strong></td></tr>
+</table>
+<p>Payment due within ${pick([15,30,45,60])} days. Bank transfer to ${pick(['IBAN: GB29NWBK60161331926819','Account: 0012345678','Routing: 021000021'])}.</p>`;
+  } else {
+    // Balance sheet / generic
+    const accounts = ['Cash & Equivalents','Accounts Receivable','Inventory','Fixed Assets','Intangible Assets'];
+    const liabilities = ['Accounts Payable','Short-term Debt','Long-term Debt','Deferred Revenue','Other Liabilities'];
+    html += `<h2>ASSETS</h2><table><tr><th>Account</th><th>Amount</th></tr>`;
+    let totalAssets = 0;
+    for (const acc of accounts) {
+      const val = randInt(10000, 5000000);
+      totalAssets += val;
+      html += `<tr><td>${acc}</td><td>${lang.currencySymbol}${val.toLocaleString()}</td></tr>`;
+    }
+    html += `<tr><td><strong>Total Assets</strong></td><td><strong>${lang.currencySymbol}${totalAssets.toLocaleString()}</strong></td></tr></table>`;
+    html += `<h2>LIABILITIES & EQUITY</h2><table><tr><th>Account</th><th>Amount</th></tr>`;
+    for (const lib of liabilities) {
+      const val = randInt(5000, totalAssets * 0.4);
+      html += `<tr><td>${lib}</td><td>${lang.currencySymbol}${Math.round(val).toLocaleString()}</td></tr>`;
+    }
+    html += `</table>`;
+    for (let i = 0; i < 2; i++) {
+      const term = pick(DATA.finTerms);
+      html += `<p>${loremParagraph()} The ${term} for this fiscal period reflects a ${randInt(2,18)}% ${pick(['increase','decrease','adjustment'])} compared to prior year, primarily driven by ${pick(['operational efficiency gains','market expansion','regulatory compliance costs','strategic acquisitions','workforce restructuring'])}.`;
+    }
+  }
+
+  const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  return { title: subtype, html, text, meta: { company: co, client, date: dateStr, invoiceNum } };
+}
+
+function generateResume(params) {
+  const name = fakeName();
+  const email = fakeEmail(name);
+  const phone = fakePhone();
+  const addr = `${pick(DATA.cities)}, ${pick(DATA.countries)}`;
+  const title = pick(['Senior Software Engineer','Financial Analyst','Product Manager','Data Scientist','Marketing Director','Operations Manager','Legal Counsel','UX Designer','Business Development Manager']);
+  const skills = pickN(DATA.skills, randInt(6, 10));
+  const numJobs = randInt(2, 5);
+  const numEdu = randInt(1, 3);
+
+  let html = `<div class="watermark-badge">⚠ SYNTHETIC RESUME — PERSON DOES NOT EXIST</div>
+<h1>${name}</h1>
+<div class="doc-meta">
+  <span>${email}</span>
+  <span>${phone}</span>
+  <span>${addr}</span>
+</div>
+<p><strong>Target Role:</strong> ${title}</p>
+<h2>SKILLS</h2>
+<p>${skills.join(' · ')}</p>
+<h2>PROFESSIONAL EXPERIENCE</h2>`;
+
+  for (let i = 0; i < numJobs; i++) {
+    const co = fakeCompany();
+    const jobTitle = pick(['Senior Analyst','Manager','Director','Associate','Lead','Specialist','Consultant','Engineer']);
+    const start = fakeDate(10);
+    const end = i === 0 ? 'Present' : LANG_META[params.language].dateFormat(fakeDate(1));
+    const startStr = LANG_META[params.language].dateFormat(start);
+    html += `<h3>${jobTitle} — ${co}</h3>
+<p style="color:#666;font-size:10pt;margin-bottom:6pt;">${startStr} – ${end}</p>
+<p>${loremParagraph(2,4)}</p>
+<p>${loremParagraph(2,3)}</p>`;
+  }
+
+  html += `<h2>EDUCATION</h2>`;
+  for (let i = 0; i < numEdu; i++) {
+    const degree = pick(DATA.degrees);
+    const field = pick(DATA.fields);
+    const uni = pick(DATA.universities);
+    const year = randInt(1990, 2022);
+    html += `<h3>${degree}, ${field}</h3><p style="color:#666;font-size:10pt;">${uni} · ${year}</p>`;
+  }
+
+  const text = `${name}\n${email} | ${phone} | ${addr}\n${'='.repeat(60)}\nSKILLS: ${skills.join(', ')}\n\nEXPERIENCE\n${'-'.repeat(40)}\n[Generated experience entries]\n\nEDUCATION\n${'-'.repeat(40)}\n[Generated education entries]`;
+  return { title: `Resume — ${name}`, html, text, meta: { name, email, phone, skills } };
+}
+
+function generateArticle(params) {
+  const subtype = params.subtype;
+  const author = fakeName();
+  const date = fakeDate(2);
+  const dateStr = LANG_META[params.language].dateFormat(date);
+  const publication = pick(['The Daily Monitor','Global Tribune','Tech Insider','Business Weekly','Science Today','The Independent Review']);
+  const topics = ['artificial intelligence', 'climate policy', 'economic recovery', 'healthcare reform', 'space exploration', 'renewable energy', 'cybersecurity', 'urban development', 'financial markets', 'public health'];
+  const topic = pick(topics);
+
+  const headlines = {
+    'News Report': [`Breaking: Major Shift in ${pick(topics).split(' ').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ')} Policy Announced`, `New Study Reveals Surprising Data on ${topic}`],
+    'Opinion Editorial': [`Why ${topic} Deserves More Attention`, `The Hidden Cost of Ignoring ${topic}`],
+    'How-to Guide': [`How to Navigate ${topic} in ${date.getFullYear()}`, `A Beginner's Complete Guide to ${topic}`],
+    'Listicle': [`7 Things You Didn't Know About ${topic}`, `Top ${randInt(5,10)} Developments in ${topic} This Year`],
+  };
+
+  const headlineOptions = headlines[subtype] || [`Analysis: The State of ${topic}`];
+  const headline = pick(headlineOptions);
+  const numParas = Math.max(3, Math.floor(params.wordCount / 80));
+
+  let html = `<div class="watermark-badge">⚠ SYNTHETIC ARTICLE — NOT REAL NEWS</div>
+<h1>${headline}</h1>
+<div class="doc-meta">
+  <span>By <strong>${author}</strong></span>
+  <span>${publication}</span>
+  <span>${dateStr}</span>
+</div>`;
+
+  if (subtype === 'Listicle') {
+    const count = randInt(5, 9);
+    html += `<p>${loremParagraph(2,3)}</p>`;
+    for (let i = 1; i <= count; i++) {
+      html += `<h2>${i}. ${loremSentence(4,8).replace('.','')}</h2><p>${loremParagraph(2,4)}</p>`;
+    }
+  } else {
+    for (let i = 0; i < numParas; i++) {
+      if (i === 1 && params.realism !== 'low') {
+        html += `<h2>${loremSentence(4,7).replace('.','')}</h2>`;
+      }
+      if (i === Math.floor(numParas/2) && params.realism !== 'low') {
+        html += `<h2>${loremSentence(4,7).replace('.','')}</h2>`;
+      }
+      html += `<p>${loremParagraph(3,6)}</p>`;
+    }
+  }
+
+  const text = html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+  return { title: headline, html, text, meta: { author, publication, date: dateStr, topic } };
+}
+
+function generateLorem(params) {
+  const subtype = params.subtype;
+  const numParas = Math.max(2, Math.floor(params.wordCount / 60));
+  let html = `<div class="watermark-badge">LOREM IPSUM — PLACEHOLDER TEXT</div><h1>Lorem Ipsum Placeholder</h1>`;
+  let text = '';
+
+  if (subtype === 'Cicero Original') {
+    const classic = 'Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis et quasi architecto beatae vitae dicta sunt explicabo.';
+    html += `<p>${classic}</p>`;
+    for (let i = 0; i < numParas - 1; i++) html += `<p>${loremParagraph()}</p>`;
+  } else {
+    for (let i = 0; i < numParas; i++) {
+      const para = loremParagraph();
+      html += `<p>${para}</p>`;
+      text += para + '\n\n';
+    }
+  }
+
+  return { title: 'Lorem Ipsum', html, text: text || html.replace(/<[^>]+>/g,' ').trim(), meta: {} };
+}
+
+function generateWikipedia(params) {
+  const topic = pick(['Quantum Mechanics', 'Byzantine Empire', 'Photosynthesis', 'The Renaissance', 'Graph Theory', 'Plate Tectonics', 'Baroque Music', 'Neural Networks', 'The Ottoman Empire', 'Thermodynamics']);
+  const author = 'Wikipedia Contributors';
+  const url = `https://en.wikipedia.org/wiki/${encodeURIComponent(topic.replace(/ /g,'_'))}`;
+  const numSections = randInt(3, 6);
+  const sectionTitles = ['Overview', 'History', 'Key Concepts', 'Applications', 'Notable Examples', 'Criticism', 'Future Directions', 'See Also'];
+  const picked = pickN(sectionTitles, numSections);
+
+  let html = `<div class="watermark-badge">WIKIPEDIA-STYLE — CC BY-SA 4.0</div>
+<h1>${topic}</h1>
+<div class="doc-meta">
+  <span>Wikipedia-style summary</span>
+  <span>Synthetic content</span>
+</div>
+<p>${loremParagraph(4,6)}</p>`;
+
+  for (const s of picked) {
+    html += `<h2>${s}</h2><p>${loremParagraph(3,6)}</p><p>${loremParagraph(2,5)}</p>`;
+  }
+
+  html += `<div class="attribution">This document was generated in Wikipedia-style format. Content is synthetic. Original Wikipedia article: <a href="${url}" style="color:#0645ad;">${topic}</a>. Licensed under <a href="https://creativecommons.org/licenses/by-sa/4.0/" style="color:#0645ad;">CC BY-SA 4.0</a>.</div>`;
+
+  const text = html.replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+  return { title: topic, html, text, meta: { topic, source: url, license: 'CC BY-SA 4.0' } };
+}
+
+function generateMixed(params) {
+  const types = ['legal','financial','resume','article','lorem'];
+  const chosen = pick(types);
+  const subParams = { ...params, docType: chosen, subtype: pick(SUBTYPES[chosen]) };
+  return dispatch(subParams);
+}
+
+function dispatch(params) {
+  switch (params.docType) {
+    case 'legal':      return generateLegal(params);
+    case 'financial':  return generateFinancial(params);
+    case 'resume':     return generateResume(params);
+    case 'article':    return generateArticle(params);
+    case 'lorem':      return generateLorem(params);
+    case 'wikipedia':  return generateWikipedia(params);
+    case 'mixed':      return generateMixed(params);
+    default:           return generateLorem(params);
+  }
+}
+
+// ═══════════════════════════════════════════════════
+//  FORMAT EXPORTERS
+// ═══════════════════════════════════════════════════
+function toTXT(doc) { return doc.text; }
+
+function toMD(doc) {
+  return `# ${doc.title}\n\n` + doc.text.replace(/([A-Z][A-Z\s]+)\n/g, '## $1\n').trim() + `\n\n---\n*Generated by JunkDocGen — lassiipk/junkdocgen — Synthetic content only*`;
+}
+
+function toJSON(doc, params, seed) {
+  return JSON.stringify({
+    meta: {
+      generator: 'JunkDocGen v1.0',
+      author: 'lassiipk',
+      seed,
+      docType: params.docType,
+      subtype: params.subtype,
+      language: params.language,
+      realism: params.realism,
+      generated: new Date().toISOString(),
+      synthetic: true,
+    },
+    document: {
+      title: doc.title,
+      ...doc.meta,
+      body: doc.text,
+    }
+  }, null, 2);
+}
+
+function toCSV(doc, params, seed) {
+  const fields = { seed, docType: params.docType, subtype: params.subtype, language: params.language, title: doc.title, ...doc.meta };
+  const keys = Object.keys(fields);
+  const vals = keys.map(k => `"${String(fields[k]).replace(/"/g,'""')}"`);
+  return keys.join(',') + '\n' + vals.join(',');
+}
+
+function toHTML(doc, params) {
+  const lang = LANG_META[params.language];
+  return `<!DOCTYPE html>
+<html lang="${params.language}" dir="${lang.dir}">
+<head>
+<meta charset="UTF-8"/>
+<meta name="generator" content="JunkDocGen v1.0 — lassiipk/junkdocgen"/>
+<meta name="synthetic" content="true"/>
+<title>${doc.title}</title>
+<style>
+  body { font-family: Georgia, serif; max-width: 800px; margin: 40px auto; padding: 0 24px; line-height: 1.7; color: #111; font-size: 12pt; }
+  h1 { font-size: 22pt; margin-bottom: 8px; }
+  h2 { font-size: 15pt; margin-top: 24px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th { background: #f0f0f0; border: 1px solid #ccc; padding: 6px 10px; }
+  td { border: 1px solid #ddd; padding: 5px 10px; }
+  .watermark-badge { color: #aaa; border: 1px solid #ddd; font-size: 9pt; padding: 2px 8px; border-radius: 3px; font-family: monospace; }
+  .attribution { margin-top: 40px; padding-top: 10px; border-top: 1px solid #ddd; font-size: 9pt; color: #888; }
+</style>
+</head>
+<body>
+${doc.html}
+<div class="attribution">Generated by <strong>JunkDocGen</strong> · <a href="https://github.com/lassiipk/junkdocgen">lassiipk/junkdocgen</a> · Synthetic content only · MIT License</div>
+</body>
+</html>`;
+}
+
+function toPDF(doc, params) {
+  const { jsPDF } = window.jspdf;
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const margin = 20;
+  const pageW = 210;
+  const lineW = pageW - margin * 2;
+  let y = margin;
+
+  const checkPage = (height = 8) => {
+    if (y + height > 280) { pdf.addPage(); y = margin; }
+  };
+
+  // Watermark
+  pdf.setFontSize(7);
+  pdf.setTextColor(180, 180, 180);
+  pdf.text('[SYNTHETIC DOCUMENT — NOT REAL]', margin, y);
+  y += 7;
+
+  // Title
+  checkPage(14);
+  pdf.setFontSize(18);
+  pdf.setFont('helvetica', 'bold');
+  pdf.setTextColor(0, 0, 0);
+  const titleLines = pdf.splitTextToSize(doc.title, lineW);
+  pdf.text(titleLines, margin, y);
+  y += titleLines.length * 8 + 4;
+
+  // Body text (strip HTML)
+  const clean = doc.text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  pdf.setFontSize(10);
+  pdf.setFont('helvetica', 'normal');
+  pdf.setTextColor(30, 30, 30);
+
+  const words = clean.split(' ');
+  const paraSize = 80;
+  for (let i = 0; i < words.length; i += paraSize) {
+    const chunk = words.slice(i, i + paraSize).join(' ');
+    const lines = pdf.splitTextToSize(chunk, lineW);
+    checkPage(lines.length * 5 + 4);
+    pdf.text(lines, margin, y);
+    y += lines.length * 5 + 4;
+  }
+
+  // Footer
+  checkPage(10);
+  pdf.setFontSize(7);
+  pdf.setTextColor(150, 150, 150);
+  pdf.text(`Generated by JunkDocGen v1.0 | lassiipk/junkdocgen | Synthetic content only | ${new Date().toISOString()}`, margin, 290);
+
+  return pdf;
+}
+
+// ═══════════════════════════════════════════════════
+//  DOWNLOAD
+// ═══════════════════════════════════════════════════
+let currentDoc = null;
+let currentParams = null;
+let currentSeed = null;
+let currentFmt = 'html';
+
+function downloadFile(content, filename, type) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+document.getElementById('downloadBtn').addEventListener('click', () => {
+  if (!currentDoc) return;
+  const slug = currentDoc.title.replace(/[^a-z0-9]/gi,'_').toLowerCase().slice(0,30);
+  const ext = currentFmt;
+  const filename = `jdg_${slug}_seed${currentSeed}.${ext}`;
+
+  if (currentFmt === 'pdf') {
+    const pdf = toPDF(currentDoc, currentParams);
+    pdf.save(filename);
+  } else {
+    let content, type;
+    switch (currentFmt) {
+      case 'txt':  content = toTXT(currentDoc); type = 'text/plain'; break;
+      case 'md':   content = toMD(currentDoc); type = 'text/markdown'; break;
+      case 'json': content = toJSON(currentDoc, currentParams, currentSeed); type = 'application/json'; break;
+      case 'csv':  content = toCSV(currentDoc, currentParams, currentSeed); type = 'text/csv'; break;
+      default:     content = toHTML(currentDoc, currentParams); type = 'text/html'; break;
+    }
+    downloadFile(content, filename, type);
+  }
+  toast(`Downloaded ${filename}`, 'success');
+});
+
+// ═══════════════════════════════════════════════════
+//  UI WIRING
+// ═══════════════════════════════════════════════════
+const subtypeEl = document.getElementById('docSubtype');
+const docTypeEl = document.getElementById('docType');
+const wcEl = document.getElementById('wordCount');
+const wcVal = document.getElementById('wcVal');
+const randEl = document.getElementById('randomness');
+const randVal = document.getElementById('randVal');
+const seedEl = document.getElementById('seed');
+const generateBtn = document.getElementById('generateBtn');
+const previewWrap = document.getElementById('previewWrap');
+const downloadBtn = document.getElementById('downloadBtn');
+
+function populateSubtypes(type) {
+  subtypeEl.innerHTML = '';
+  for (const s of SUBTYPES[type]) {
+    const opt = document.createElement('option');
+    opt.value = s; opt.textContent = s;
+    subtypeEl.appendChild(opt);
+  }
+}
+
+docTypeEl.addEventListener('change', () => populateSubtypes(docTypeEl.value));
+populateSubtypes(docTypeEl.value);
+
+wcEl.addEventListener('input', () => { wcVal.textContent = wcEl.value; });
+randEl.addEventListener('input', () => { randVal.textContent = parseFloat(randEl.value).toFixed(2); });
+
+document.getElementById('randSeed').addEventListener('click', () => {
+  seedEl.value = Math.floor(Math.random() * 999999);
+});
+
+document.querySelectorAll('.fmt-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.fmt-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFmt = btn.dataset.fmt;
+    document.getElementById('dlFormat').textContent = currentFmt.toUpperCase();
+  });
+});
+
+generateBtn.addEventListener('click', generate);
+
+async function generate() {
+  generateBtn.classList.add('loading');
+  generateBtn.disabled = true;
+
+  await new Promise(r => setTimeout(r, 30)); // Allow repaint
+
+  const seed = seedEl.value.trim() || Math.floor(Math.random() * 999999);
+  seedEl.value = seed;
+  initRNG(seed);
+
+  const params = {
+    docType:   docTypeEl.value,
+    subtype:   subtypeEl.value,
+    language:  document.getElementById('language').value,
+    wordCount: parseInt(wcEl.value),
+    realism:   document.getElementById('realism').value,
+    randomness: parseFloat(randEl.value),
+  };
+
+  currentParams = params;
+  currentSeed = seed;
+
+  const doc = dispatch(params);
+  currentDoc = doc;
+
+  // Stats
+  const wordCount = doc.text.split(/\s+/).filter(Boolean).length;
+  document.getElementById('statWords').textContent = wordCount.toLocaleString();
+  document.getElementById('statChars').textContent = doc.text.length.toLocaleString();
+  document.getElementById('statFmt').textContent = currentFmt.toUpperCase();
+  document.getElementById('statSeed').textContent = seed;
+  document.getElementById('statLang').textContent = params.language.toUpperCase();
+  document.getElementById('usedSeed').textContent = seed;
+  document.getElementById('docTypeLabel').textContent = `${params.subtype} · ${params.docType} · ${params.realism} realism`;
+
+  // Render preview
+  const dir = LANG_META[params.language].dir;
+  previewWrap.innerHTML = `<div class="doc-preview" dir="${dir}">${doc.html}</div>`;
+
+  downloadBtn.disabled = false;
+  document.getElementById('dlFormat').textContent = currentFmt.toUpperCase();
+
+  generateBtn.classList.remove('loading');
+  generateBtn.disabled = false;
+
+  toast('Document generated', 'success');
+}
+
+function toast(msg, type = '') {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
+
+// Auto-generate on load
+window.addEventListener('load', () => {
+  seedEl.value = Math.floor(Math.random() * 999999);
+  setTimeout(generate, 400);
+});
+</script>
+</body>
+</html>
